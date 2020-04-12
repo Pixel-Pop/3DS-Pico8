@@ -1009,7 +1009,7 @@ static BinOpr getbinopr (int op) {
     case TK_SHL: return OPR_SHL;
     case TK_SHR: return OPR_SHR;
     case TK_CONCAT: return OPR_CONCAT;
-    case TK_NE: return OPR_NE;
+    case TK_NE: case TK_NE_A: return OPR_NE;
     case TK_EQ: return OPR_EQ;
     case '<': return OPR_LT;
     case TK_LE: return OPR_LE;
@@ -1173,6 +1173,36 @@ static void assignment (LexState *ls, struct LHS_assign *lh, int nvars) {
   luaK_storevar(ls->fs, &lh->v, &e);
 }
 
+/* Pico8 Compound Assignment Operator */
+static void compound(LexState* ls, expdesc* v) {
+   int i, line, extra;
+   FuncState* fs = ls->fs;
+   expdesc e1 = *v, e2;
+   /* compound -> ( `+=' | `-=' | `*=' | `/=' | `%=' ) expression */
+   BinOpr op = ls->t.token == TK_ADD ? OPR_ADD :
+      ls->t.token == TK_SUB ? OPR_SUB :
+      ls->t.token == TK_MUL ? OPR_MUL :
+      ls->t.token == TK_DIV ? OPR_DIV :
+      ls->t.token == TK_MOD ? OPR_MOD :
+      OPR_NOBINOPR;
+   extra = fs->freereg - fs->nactvar;
+   for (i = 0; i < extra; ++i)
+      new_localvarliteral(ls, "(for compound)");
+   adjustlocalvars(ls, extra);
+
+   luaX_next(ls);
+   line = ls->linenumber;
+
+   enterlevel(ls);
+   luaK_infix(fs, op, &e1);
+   expr(ls, &e2);
+   luaK_posfix(fs, op, &e1, &e2, line);
+   leavelevel(ls);
+
+   luaK_exp2nextreg(fs, &e1);
+   luaK_setoneret(ls->fs, &e1);
+   luaK_storevar(ls->fs, v, &e1);
+}
 
 static int cond (LexState *ls) {
   /* cond -> exp */
@@ -1486,11 +1516,17 @@ static void funcstat (LexState *ls, int line) {
 
 
 static void exprstat (LexState *ls) {
-  /* stat -> func | assignment */
+  /* stat -> func | assignment */ /* Pico8: compound */
   FuncState *fs = ls->fs;
   struct LHS_assign v;
   suffixedexp(ls, &v.v);
-  if (ls->t.token == '=' || ls->t.token == ',') { /* stat -> assignment ? */
+  if (ls->t.token == TK_ADD || ls->t.token == TK_SUB ||
+     ls->t.token == TK_MUL || ls->t.token == TK_DIV ||
+     ls->t.token == TK_MOD) {
+     v.prev = NULL;
+     compound(ls, &v.v);
+  }
+  else if (ls->t.token == '=' || ls->t.token == ',') { /* stat -> assignment ? */
     v.prev = NULL;
     assignment(ls, &v, 1);
   }

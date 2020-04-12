@@ -43,6 +43,8 @@ static const char *const luaX_tokens [] = {
     "in", "local", "nil", "not", "or", "repeat",
     "return", "then", "true", "until", "while",
     "//", "..", "...", "==", ">=", "<=", "~=",
+    // Custom Pico8 tokens.
+    "!=", "+=", "-=", "*=", "/=", "%=",
     "<<", ">>", "::", "<eof>",
     "<number>", "<integer>", "<name>", "<string>"
 };
@@ -438,9 +440,10 @@ static int llex (LexState *ls, SemInfo *seminfo) {
         next(ls);
         break;
       }
-      case '-': {  /* '-' or '--' (comment) */
+      case '-': {  /* '-' or '--' (comment) */ /* Pico8 '-=' */
         next(ls);
-        if (ls->current != '-') return '-';
+        if (ls->current == '=') { next(ls); return TK_SUB; }
+        else if (ls->current != '-') return '-';
         /* else is a comment */
         next(ls);
         if (ls->current == '[') {  /* long comment? */
@@ -484,15 +487,23 @@ static int llex (LexState *ls, SemInfo *seminfo) {
         else if (check_next1(ls, '>')) return TK_SHR;
         else return '>';
       }
-      case '/': {
+      case '/': { /* Pico8: '/=' */
         next(ls);
-        if (check_next1(ls, '/')) return TK_IDIV;
+        if (ls->current == '=') { next(ls); return TK_DIV; }
+        else if (check_next1(ls, '/')) return TK_IDIV;
         else return '/';
       }
-      case '~': {
-        next(ls);
-        if (check_next1(ls, '=')) return TK_NE;
-        else return '~';
+      case '+': case '*': case '%': { /* '+', '*', '%'*/ /* Pico8: '+=', '*=', '%=' */
+         int c = ls->current;
+         next(ls);
+         if (ls->current != '=') return c;
+         else { next(ls); return c == '+' ? TK_ADD : c == '*' ? TK_MUL : TK_MOD; }
+      }
+      case '~': case '!': {
+         int c = ls->current;
+         next(ls);
+         if (ls->current != '=') return c;
+         else { next(ls); return c == '~' ? TK_NE : TK_NE_A; }
       }
       case ':': {
         next(ls);

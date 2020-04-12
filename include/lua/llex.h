@@ -31,6 +31,9 @@ enum RESERVED {
   TK_RETURN, TK_THEN, TK_TRUE, TK_UNTIL, TK_WHILE,
   /* other terminal symbols */
   TK_IDIV, TK_CONCAT, TK_DOTS, TK_EQ, TK_GE, TK_LE, TK_NE,
+  /* --- Custom Pico8 Symbols --- */
+  TK_NE_A, TK_ADD, TK_SUB, TK_MUL, TK_DIV, TK_MOD,
+  /* --- */
   TK_SHL, TK_SHR,
   TK_DBCOLON, TK_EOS,
   TK_FLT, TK_INT, TK_NAME, TK_STRING
