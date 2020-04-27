@@ -44,16 +44,25 @@ extern int luaopen_pico(lua_State* L);
 
 /* Main */
 
+struct LineEndpoint {
+   bool active;
+   double x1;
+   double y1;
+};
+
 struct Pico8 {
    C3D_RenderTarget* screen;
    C2D_Font font;
    u32 colors[16];
-   // Total amount of sprites - Columns - Rows
-   u8	sprites[128][8][4];
+   u8	sprites[64][64];
+   u8 overlap[64][64];
+   u8 map[128][32];
    char* script;
    TickCounter* tickCounter;
    double elapsedTime;
    bool screenCleared;
+   struct LineEndpoint lineEndpoint;
+   u8* previousScreen;
 };
 
 extern struct Pico8 pico8;

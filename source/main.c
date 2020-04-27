@@ -12,7 +12,7 @@ void init() {
 	// Create screens
 	gfxInitDefault();
 	C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
-	C2D_Init(C2D_DEFAULT_MAX_OBJECTS * 8);
+	C2D_Init(C2D_DEFAULT_MAX_OBJECTS * 32);
 	C2D_Prepare();
 	pico8.screen = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
 	consoleInit(GFX_BOTTOM, NULL);
@@ -63,51 +63,56 @@ int main(int argc, char* argv[])
 	luaL_openlibs(L);
 	luaL_requiref(L, "pico", luaopen_pico, 1);
 
-	bool error = loadCart();
-	if (!error) {
-		// Clear homebrew launcher screen
-		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-		C2D_TargetClear(pico8.screen, pico8.colors[0]);
-		C2D_SceneBegin(pico8.screen);
-		C3D_FrameEnd(0);
+	// Check for error.
+	if (loadCart()) { finish(); return 0; }
 
-		// Run script to create necessary functions.
-		luaL_dostring(L, pico8.script);
+	// Clear homebrew launcher screen
+	C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+	C2D_SceneBegin(pico8.screen);
+	C2D_TargetClear(pico8.screen, pico8.colors[0]);
+	C3D_FrameEnd(0);
 
-		osTickCounterStart(pico8.tickCounter);
+	// Run script to create necessary functions.
+	luaL_dostring(L, pico8.script);
 
-		// Main loop
-		while (aptMainLoop())
-		{
-			osTickCounterUpdate(pico8.tickCounter);
-			pico8.elapsedTime = pico8.elapsedTime + osTickCounterRead(pico8.tickCounter);
-			
-			hidScanInput();
-			u32 kDown = hidKeysDown();
-			if (kDown & KEY_START)
-				break; // break in order to return to hbmenu
+	luaL_dostring(L, "_init()");
 
-			if (pico8.screenCleared) {
-				// Render the scene		
-				C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-				C2D_SceneBegin(pico8.screen);
-				pico8.screenCleared = false;
-			}
+	osTickCounterStart(pico8.tickCounter);
 
-			while (pico8.elapsedTime > 33.33333333f) {
-				luaL_dostring(L, "_update()");
-				luaL_dostring(L, "_draw()");
-				pico8.elapsedTime -= 33.33333333f;
-			}
+	// Main loop
+	while (aptMainLoop())
+	{
+		osTickCounterUpdate(pico8.tickCounter);
+		pico8.elapsedTime = pico8.elapsedTime + osTickCounterRead(pico8.tickCounter);
+		
+		pico8.previousScreen = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
 
-			if (pico8.screenCleared) {
-				C3D_FrameEnd(0);
-			}
+		hidScanInput();
+		u32 kDown = hidKeysDown();
+		if (kDown & KEY_START)
+			break; // break in order to return to hbmenu
 
+		if (pico8.screenCleared) {
+			// Render the scene		
+			C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+			C2D_SceneBegin(pico8.screen);
+			pico8.screenCleared = false;
 		}
+
+		// Limit fps to ~30.
+		while (pico8.elapsedTime > 33.33333333f) {
+			luaL_dostring(L, "_update()");
+			pico8.elapsedTime -= 33.33333333f;
+		}
+		luaL_dostring(L, "_draw()");
+
+		if (pico8.screenCleared) {
+			C3D_FrameEnd(0);
+		}
+
 	}
 
 	finish();
-	
+
 	return 0;
 }

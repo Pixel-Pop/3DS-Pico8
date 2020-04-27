@@ -20,7 +20,7 @@ bool loadCart() {
    unsigned char temp;
 
 
-   error = lodepng_decode32_file(&image, &width, &height, "/Pico8Carts/helloworld.p8.png");
+   error = lodepng_decode32_file(&image, &width, &height, "/Pico8Carts/rainyday.p8.png");
    if (error) {
       printf("error %u: %s\n", error, lodepng_error_text(error));
       return true;
@@ -40,22 +40,58 @@ bool loadCart() {
    }
 
    // Load Sprites
-   for (int i = 0, spriteY = 0; spriteY < 8; spriteY++) {
-      for (int currRow = 0; currRow < 8; currRow++) {
-         for (int spriteX = 0; spriteX < 16; spriteX++) {
-            for (int currCol = 0; currCol < 4; currCol++) {
-               pico8.sprites[spriteX + spriteY * 16][currRow][currCol] = decodeImage[i];
-               i = i + 1;
-            }
-         }
+   for (u8 x = 0; x < 64; x++) {
+      for (u8 y = 0; y < 64; y++) {
+         pico8.sprites[x][y] = decodeImage[x + y * 64];
       }
    }
 
-   // TODO Load Shared Region
-   // TODO Load Map
-   // TODO Load Lua Code
-   pico8.script = malloc(0x3D00 + 1);
-   memcpy(pico8.script, decodeImage + 0x4300, 0x3D00);
+   // Load overlapping region.
+   for (u8 x = 0; x < 64; x++) {
+      for (u8 y = 0; y < 64; y++) {
+         pico8.overlap[x][y] = decodeImage[x + y * 64 + 0x1000];
+      }
+   }
+
+   // Load Map
+   for (u8 x = 0; x < 128; x++) {
+      for (u8 y = 0; y < 32; y++) {
+         pico8.map[x][y] = decodeImage[x + y * 128 + 0x2000];
+      }
+   }
+
+   // TODO New Compression Lua Code
+   
+   if (strncmp((char *)decodeImage + 0x4300, ":c:\0", 4) == 0) {
+      char lookupTable[] = "\n 0123456789abcdefghijklmnopqrstuvwxyz!#%(){}[]<>+=/*:;.,~_";
+      int length = (int)(decodeImage[0x4304] << 8) + (int)(decodeImage[0x4305]);
+      int offset;
+      int copyLength;
+      int currByte;
+      pico8.script = malloc(length+1);
+      pico8.script[length] = '\0';
+      for (int i = 0, position = 0; position < length; i++) {
+         currByte = decodeImage[0x4308 + i];
+         if (currByte == 0x00) {
+            pico8.script[position] = decodeImage[0x4308 + ++i];
+            position++;
+         }
+         else if (currByte <= 0x3b) {
+            pico8.script[position] = lookupTable[currByte - 1];
+            position++;
+         }
+         else { //0x3c-0xff
+            offset = ((currByte - 0x3c) << 4) + (decodeImage[0x4308 + ++i] & 0xf);
+            copyLength = (decodeImage[0x4308 + i] >> 4) + 2;
+            memcpy(pico8.script + position, pico8.script + (position - offset), copyLength);
+            position += copyLength;
+         }
+      }
+   }
+   else {
+      pico8.script = malloc(0x3D00 + 1);
+      memcpy(pico8.script, decodeImage + 0x4300, 0x3D00);
+   }
 
    free(image);
    free(decodeImage);

@@ -9,8 +9,8 @@
 
 struct DrawState drawState = { 0, {0, 0}, {0, 0} };
 
-
 /* Helper Functions */
+
 float toScreenX(int x) {
    return x * PICO8_3DS_RATIO + 80;
 }
@@ -19,15 +19,16 @@ float toScreenY(int y) {
    return y * PICO8_3DS_RATIO;
 }
 
-// Audio Manipulation
+/* Audio Manipulation */
+
 static int l_music(lua_State* L) {
-   printf("Music was called! (But it doesn't exist yet...)");
-   return 1;
+   // Placeholder
+   return 0;
 }
 
 static int l_sfx(lua_State* L) {
-   // TODO figure out sfx
-   return 1;
+   // Placeholder
+   return 0;
 }
 
 // Cart Data Manipulation
@@ -36,10 +37,11 @@ static int l_sfx(lua_State* L) {
 // Coroutines
 
 
-// Graphics Manipulation
+/* Graphics Manipulation */
 
 static int l_circ(lua_State* L) {
-   // TODO draw an outline only somehow
+   // TODO draw circle outline w/ lines potentially
+   // Placeholder
    double x = toScreenX(lua_tonumber(L, 1));
    double y = toScreenY(lua_tonumber(L, 2));
    double radius = 4;
@@ -50,8 +52,7 @@ static int l_circ(lua_State* L) {
    if (lua_gettop(L) >= 4) {
       useColor = lua_tonumber(L, 4);
    }
-   C2D_DrawCircle(x, y, 0.0f, radius * PICO8_3DS_RATIO, drawState.palette[useColor], drawState.palette[useColor], drawState.palette[useColor], drawState.palette[useColor]);
-   return 1;
+   return 0;
 }
 
 static int l_circfill(lua_State* L) {
@@ -66,7 +67,7 @@ static int l_circfill(lua_State* L) {
       useColor = lua_tonumber(L, 4);
    }
    C2D_DrawCircleSolid(x, y, 0.0f, radius * PICO8_3DS_RATIO, drawState.palette[useColor]);
-   return 1;
+   return 0;
 }
 
 static int l_cls(lua_State* L) {
@@ -83,11 +84,13 @@ static int l_cls(lua_State* L) {
    C2D_TextBufClear(g_staticBuf);
    drawState.cursor.x = 0;
    drawState.cursor.y = 0;
-
-   return 1;
+   
+   return 0;
 }
 
 static int l_color(lua_State* L) {
+   // Return previous color.
+   lua_pushnumber(L, drawState.color);
    drawState.color = (int)lua_tonumber(L, 1);
    return 1;
 }
@@ -118,18 +121,18 @@ static int l_line(lua_State* L) {
          pico8.lineEndpoint.x1 = lua_tonumber(L, 1);
          pico8.lineEndpoint.y1 = lua_tonumber(L, 2);
          pico8.lineEndpoint.active = true;
-         return 1;
+         return 0;
       }
 
    }
    else {
       if (arguments == 1) { drawState.color = lua_tonumber(L, 1); }
       pico8.lineEndpoint.active = false;
-      return 1;
+      return 0;
    }
 
    C2D_DrawLine(x0, y0, drawState.palette[drawState.color], toScreenX(pico8.lineEndpoint.x1), toScreenY(pico8.lineEndpoint.y1), drawState.palette[drawState.color], 1.875f, 0.0f);
-   return 1;
+   return 0;
 }
 
 static int l_pal(lua_State* L) {
@@ -138,6 +141,7 @@ static int l_pal(lua_State* L) {
       u8 origColor = lua_tonumber(L, 1);
       u8 newColor = lua_tonumber(L, 2);
       drawState.palette[origColor] = pico8.colors[newColor];
+      drawState.paletteTransparency[origColor] = drawState.paletteTransparency[newColor];
    }
    else {
       memcpy(drawState.palette, pico8.colors, sizeof(u32) * 16);
@@ -149,7 +153,52 @@ static int l_pal(lua_State* L) {
    if (arguments > 2) {
 
    }
-   return 1;
+   return 0;
+}
+
+static int l_palt(lua_State* L) {
+   if (lua_gettop(L) > 0) {
+      drawState.paletteTransparency[(int)lua_tonumber(L, 1)] = lua_toboolean(L, 2);
+   }
+   else {
+      drawState.paletteTransparency[0] = true;
+      for (u8 i = 1; i < 16; i++) {
+         drawState.paletteTransparency[i] = false;
+      }
+   }
+   return 0;
+}
+
+static int l_pget(lua_State* L) {
+   /* Can only check pixels from previous frame. */
+   /* Not guaranteed to be 100% accurate.        */
+   int x = lua_tonumber(L, 1);
+   int y = lua_tonumber(L, 2);
+
+   u32 index = 240 * 3 - round((float)y * 1.875f) * 3 - 3 + 240 * 3 * (80 + round((float)x * 1.875f));
+   u32 color = C2D_Color32(pico8.previousScreen[index + 2], pico8.previousScreen[index + 1], pico8.previousScreen[index], 0xFF);
+   for (u8 i = 0; i < 16; i++) {
+      if (pico8.colors[i] == color) {
+         lua_pushnumber(L, i);
+         return 1;
+      }
+   }
+   return 0;
+}
+
+static int l_pset(lua_State* L) {
+   int x1 = toScreenX(lua_tonumber(L, 1));
+   int y1 = toScreenY(lua_tonumber(L, 2));
+   u8 useColor;
+   if (lua_gettop(L) > 2) {
+      useColor = lua_tonumber(L, 3);
+   }
+   else {
+      useColor = drawState.color;
+   }
+   C2D_DrawRectSolid(x1, y1, 0.0f, 1.875f, 1.875f, drawState.palette[useColor]);
+
+   return 0;
 }
 
 static int l_print(lua_State* L) {
@@ -185,7 +234,7 @@ static int l_print(lua_State* L) {
    C2D_TextOptimize(&g_staticText);
 
    C2D_DrawText(&g_staticText, C2D_WithColor, x, y, 0.0f, 0.3125f, 0.3125f, drawState.palette[useColor]);
-   return 1;
+   return 0;
 }
 
 static int l_rectfill(lua_State* L) {
@@ -202,32 +251,123 @@ static int l_rectfill(lua_State* L) {
       useColor = drawState.color;
    }
 
-   C2D_DrawRectangle(x1, y1, 1, x2 - x1, y2 - y1, drawState.palette[useColor], drawState.palette[useColor], drawState.palette[useColor], drawState.palette[useColor]);
-   return 1;
+   C2D_DrawRectSolid(x1, y1, 0.0f, x2 - x1, y2 - y1, drawState.palette[useColor]);
+   return 0;
 }
 
 static int l_spr(lua_State* L) {
+   // Get arguments
    u8 spriteNum = lua_tonumber(L, 1);
-   int x = lua_tonumber(L, 2) * PICO8_3DS_RATIO + 80;
-   int y = lua_tonumber(L, 3) * PICO8_3DS_RATIO;
-   u8 currColor;
+   float x = lua_tonumber(L, 2);
+   float y = lua_tonumber(L, 3);
+   float width = 8.0f;
+   float height = 8.0f;
+   bool flip_x;
+   bool flip_y;
 
-   for (u8 i = 0; i < 8; i++) {
-      for (u8 j = 0; j < 4; j++) {
-         currColor = pico8.sprites[spriteNum][i][j];
-         if (!drawState.paletteTransparency[currColor & 15]) {
-            C2D_DrawRectangle(x + j * 2 * 1.875, y + i * 1.875, 1.0f, 1.875f, 1.875f, drawState.palette[currColor & 15], drawState.palette[currColor & 15], drawState.palette[currColor & 15], drawState.palette[currColor & 15]);
-         }
-         if (!drawState.paletteTransparency[currColor >> 4]) {
-            C2D_DrawRectangle(x + (j * 2 + 1) * 1.875, y + i * 1.875, 1.0f, 1.875f, 1.875f, drawState.palette[currColor >> 4], drawState.palette[currColor >> 4], drawState.palette[currColor >> 4], drawState.palette[currColor >> 4]);
+   switch (lua_gettop(L)) {
+   case 7:
+      flip_y = lua_toboolean(L, 7);
+   case 6:
+      flip_x = lua_toboolean(L, 6);
+   case 5:
+      height = lua_tonumber(L, 5) * 8.0f;
+   case 4:
+      width = lua_tonumber(L, 4) * 8.0f;
+      break;
+   }
+
+   u8 sheetX = (spriteNum % 16) * 8;
+   u8 sheetY = (spriteNum / 16) * 8;
+
+   u8 currColor;
+   int currSheetX;
+   int currSheetY;
+   for (int loopX = 0; loopX < width; loopX++) {
+      for (int loopY = 0; loopY < height; loopY++) {
+         currSheetX = loopX + sheetX;
+         currSheetY = loopY + sheetY;
+
+         currColor = (currSheetY < 128) ? pico8.sprites[currSheetX / 2][currSheetY] : pico8.overlap[currSheetX][currSheetY - 128];
+         currColor = (currSheetX % 2 == 0) ? currColor & 15 : currColor >> 4;
+         
+         if (!drawState.paletteTransparency[currColor]) {
+            C2D_DrawRectSolid(toScreenX(x + loopX), toScreenY(y + loopY), 0.0f, 1.875f, 1.875f, drawState.palette[currColor]);
          }
       }
    }
 
-   return 1;
+   return 0;
 }
 
-// Input Manipulation
+static int l_sspr(lua_State* L) {
+   u8 sheetX = lua_tonumber(L, 1);
+   u8 sheetY = lua_tonumber(L, 2);
+   u8 sheetWidth = lua_tonumber(L, 3);
+   u8 sheetHeight = lua_tonumber(L, 4);
+   u8 x = lua_tonumber(L, 5);
+   u8 y = lua_tonumber(L, 6);
+   u8 width = sheetWidth;
+   u8 height = sheetHeight;
+   bool flip_x;
+   bool flip_y;
+   switch (lua_gettop(L)) {
+   case 10:
+      flip_y = lua_toboolean(L, 10);
+   case 9:
+      flip_x = lua_toboolean(L, 9);
+   case 8:
+      height = lua_tonumber(L, 8);
+   case 7:
+      width = lua_tonumber(L, 7);
+      break;
+   }
+
+   float stretchX = (float) (sheetWidth) / (float) (width);
+   float stretchY = (float) (sheetHeight) / (float) (height);
+
+   // Helping variables.
+   u8 currSheetX;
+   u8 currSheetY;
+   u8 currColor;
+   float stretchHoldX = ceil(stretchX);
+   float stretchHoldY = ceil(stretchY);
+   u8 stretchOffsetX = 0;
+   u8 stretchOffsetY = 0;
+   // Loop through each pixel on the sprite sheet.
+   for (u8 loopX = 0; loopX < sheetWidth; loopX++) {
+      currSheetX = loopX + sheetX;
+      stretchOffsetY = 0;
+      for (u8 loopY = 0; loopY < sheetHeight; loopY++) {
+         currSheetY = loopY + sheetY;
+
+         // Get either from sprite or overlap region. Get either first or second pixel color.
+         currColor = (currSheetY < 128) ? pico8.sprites[currSheetX/2][currSheetY] : pico8.overlap[currSheetX][currSheetY - 128];
+         currColor = (currSheetX % 2 == 0) ? currColor & 15 : currColor >> 4;
+
+         // Draw necessary pixels, depending on stretch.
+         if (!drawState.paletteTransparency[currColor]) {
+            for (int i = 0; i < floor(stretchHoldX); i++) {
+               for (int j = 0; j < floor(stretchHoldY); j++) {
+                  C2D_DrawRectSolid(toScreenX(x + i + stretchOffsetX), toScreenY(y + j + stretchOffsetY), 0.0f, 1.875f, 1.875f, drawState.palette[currColor]);
+               }
+            }
+         }
+
+         stretchOffsetX += floor(stretchHoldX);
+         stretchOffsetY += floor(stretchHoldY);
+         stretchHoldX = fmod(stretchHoldX, 1.0f);
+         stretchHoldY = fmod(stretchHoldY, 1.0f);
+         stretchHoldX += stretchX;
+         stretchHoldY += stretchY;
+      }
+   }
+   
+   return 0;
+}
+
+/* Input Manipulation */
+
 static int l_btn(lua_State* L) {
    u32 keyHeld = hidKeysHeld();
    /* Pico 8 Button Numbers
@@ -264,10 +404,61 @@ static int l_btn(lua_State* L) {
 }
 
 
-// Map Manipulation
+/* Map Manipulation */
+
+static int l_map(lua_State* L) {
+   u8 celx = lua_tonumber(L, 1);
+   u8 cely = lua_tonumber(L, 2);
+   int sx = toScreenX(lua_tonumber(L, 3));
+   int sy = toScreenY(lua_tonumber(L, 4));
+   u8 celw = lua_tonumber(L, 5);
+   u8 celh = lua_tonumber(L, 6);
+
+   u8 currSprite;
+   // This is bad, confusing code.
+   for (u8 currX = 0; currX < celw; currX++) {
+      for (u8 currY = 0; currY < celh; currY++) {
+         currSprite = pico8.map[celx + currX][cely + currY];
+         if (currSprite == 0) {
+            continue;
+         }
+
+         /* --- Draw Sprite --- */
+
+         // Create necessary variables.
+         u8 currColor;
+         u8(*graphicsPointer)[64][64] = &pico8.sprites;
+         // Handle if the specified sprite is in the overlapping memory region.
+         if (currSprite >= 128) {
+            currSprite -= 128;
+            graphicsPointer = &pico8.overlap;
+         }
+
+         u8 pixelX = (currSprite % 16) * 4;
+         u8 pixelY = (currSprite / 16) * 8;
+
+         for (u8 i = 0; i < 4; i++) {
+            for (u8 j = 0; j < 8; j++) {
+               currColor = (*graphicsPointer)[i + pixelX][j + pixelY];
+               if (!drawState.paletteTransparency[currColor & 15]) {
+                  C2D_DrawRectSolid(sx + (i * 2 + currX * 8) * 1.875, sy + (j + currY * 8) * 1.875, 0.0f, 1.875f, 1.875f, drawState.palette[currColor & 15]);
+               }
+               if (!drawState.paletteTransparency[currColor >> 4]) {
+                  C2D_DrawRectSolid(sx + (i * 2 + 1 + currX * 8) * 1.875, sy + (j + currY * 8) * 1.875, 0.0f, 1.875f, 1.875f, drawState.palette[currColor >> 4]);
+               }
+            }
+         }
+
+         /* === End === */
+
+      }
+   } 
+   return 0;
+}
 
 
-// Math Functions
+/* Math Functions */
+
 static int l_abs(lua_State* L) {
    lua_Number input = lua_tonumber(L, 1);
    lua_pushnumber(L, fabs(input));
@@ -335,8 +526,7 @@ static int l_sgn(lua_State* L) {
 }
 
 static int l_sin(lua_State* L) {
-   double input = lua_tonumber(L, 1);
-   lua_pushnumber(L, -sin(input * M_PI * 2));
+   lua_pushnumber(L, -sin(lua_tonumber(L, 1) * M_PI * 2));
    return 1;
 }
 
@@ -346,11 +536,47 @@ static int l_sin(lua_State* L) {
 
 // Peek / Poke
 
-// Table Manipulation
+static int l_stat(lua_State* L) {
+   // TODO think of allowing frame rate changes?
+   // Placeholder
+   lua_pushnumber(L, 30);
+   return 1;
+}
+
+/* Table Manipulation */
+
 static int l_add(lua_State* L) {
    lua_Integer tableLen = luaL_len(L, 1);
    lua_seti(L, 1, tableLen + 1);
+   // Return the added value.
+   lua_pushvalue(L, 1);
    return 1;
+}
+
+static u16* currIndex = NULL;
+static int all_iterator(lua_State* L) {
+   // Not sure how to implement all() so it exactly matches the one in Pico8 wiki.
+
+   while (*currIndex <= luaL_len(L, 1)) {
+      if (lua_geti(L, 1, *currIndex) != LUA_TNIL) {
+         *currIndex += 1;
+         return 1;
+      }
+      *currIndex += 1;
+   }
+
+   lua_pushnil(L);
+   free(currIndex);
+   return 1;
+}
+
+static int l_all(lua_State* L) {
+   currIndex = malloc(sizeof(u16));
+   *currIndex = 1;
+   lua_pushcfunction(L, all_iterator);  /* iteration function */
+   lua_pushvalue(L, 1);  /* invariant table */
+   lua_pushinteger(L, 0);  /* initial value */
+   return 3;
 }
 
 static int l_del(lua_State* L) {
@@ -380,7 +606,7 @@ static int l_foreach(lua_State* L) {
       lua_geti(L, 1, i);
       lua_call(L, 1, LUA_MULTRET);
    }
-   return 1;
+   return 0;
 }
 
 
@@ -395,11 +621,17 @@ static const luaL_Reg picolib[] = {
      {"color", l_color},
      {"line", l_line},
      {"pal", l_pal},
+     {"palt", l_palt},
+     {"pget", l_pget},
+     {"pset", l_pset},
      {"print", l_print},
      {"rectfill", l_rectfill},
      {"spr", l_spr},
+     {"sspr", l_sspr},
    // Input Manipulation
      {"btn", l_btn},
+   // Map Manipulation
+     {"map", l_map},
    // Math Functions
      {"abs", l_abs},
      {"cos", l_cos},
@@ -409,8 +641,11 @@ static const luaL_Reg picolib[] = {
      {"rnd", l_rnd},
      {"sgn", l_sgn},
      {"sin", l_sin},
+   // Pico 8
+     {"stat", l_stat},
    // Table Manipulation
      {"add", l_add},
+     {"all", l_all},
      {"del", l_del},
      {"foreach", l_foreach},
      {NULL, NULL}  /* sentinel */
