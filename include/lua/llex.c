@@ -83,6 +83,12 @@ void luaX_init (lua_State *L) {
 }
 
 
+// Pico8: One-line if
+void luaX_trackbraces(LexState* ls) {
+   ls->braces = ls->t.token == '(' ? 1 : -1;
+}
+
+
 const char *luaX_token2str (LexState *ls, int token) {
   if (token < FIRST_RESERVED) {  /* single-byte symbols? */
     lua_assert(token == cast_uchar(token));
@@ -180,6 +186,10 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->emiteol = 0;
 
   ls->lastline = 1;
+
+  // Pico8: One-line if
+  ls->braces = -1;
+
   ls->source = source;
   ls->envn = luaS_newliteral(L, LUA_ENV);  /* get env name */
   luaZ_resizebuffer(ls->L, ls->buff, LUA_MINBUFFER);  /* initialize buffer */
@@ -575,6 +585,11 @@ static int llex (LexState *ls, SemInfo *seminfo) {
         }
         else {  /* single-char tokens (+ - / ...) */
           int c = ls->current;
+
+          // Pico8: One-line if
+          ls->braces += c == ')' ? -1 :  /* handle brace count for short if */
+             c == '(' ? ls->braces > 0 ? 1 : -1 : 0;
+
           next(ls);
           return c;
         }

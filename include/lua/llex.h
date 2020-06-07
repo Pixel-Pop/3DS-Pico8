@@ -62,11 +62,14 @@ typedef struct Token {
 typedef struct LexState {
   int current;  /* current character (charint) */
   int linenumber;  /* input line counter */
-  // Pico8: Shorthand If
+  // Pico8: Shorthand print()
   int atsol;  /* are we at start of line? */
   int emiteol;  /* should EOL be emitted? */
 
   int lastline;  /* line of last token 'consumed' */
+  // Pico8: One-line if
+  int braces;  /* braces context */
+
   Token t;  /* current token */
   Token lookahead;  /* look ahead token */
   struct FuncState *fs;  /* current function (parser) */
@@ -88,6 +91,8 @@ LUAI_FUNC void luaX_next (LexState *ls);
 LUAI_FUNC int luaX_lookahead (LexState *ls);
 LUAI_FUNC l_noret luaX_syntaxerror (LexState *ls, const char *s);
 LUAI_FUNC const char *luaX_token2str (LexState *ls, int token);
+// Pico8: One-line if
+LUAI_FUNC void luaX_trackbraces(LexState* ls);
 
 
 #endif
