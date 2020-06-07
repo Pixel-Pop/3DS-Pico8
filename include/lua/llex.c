@@ -46,7 +46,9 @@ static const char *const luaX_tokens [] = {
     // Custom Pico8 tokens.
     "!=", "+=", "-=", "*=", "/=", "%=",
     "<<", ">>", "::", "<eof>",
-    "<number>", "<integer>", "<name>", "<string>"
+    "<number>", "<integer>", "<name>", "<string>",
+    // Custom Pico8 tokens.
+    "?", "<eol>"
 };
 
 
@@ -158,6 +160,8 @@ static void inclinenumber (LexState *ls) {
     next(ls);  /* skip '\n\r' or '\r\n' */
   if (++ls->linenumber >= MAX_INT)
     lexerror(ls, "chunk has too many lines", 0);
+  // Pico8: Shorthand print()
+  ls->atsol = 1;
 }
 
 
@@ -170,6 +174,11 @@ void luaX_setinput (lua_State *L, LexState *ls, ZIO *z, TString *source,
   ls->z = z;
   ls->fs = NULL;
   ls->linenumber = 1;
+
+  // Pico8: Shorthand print()
+  ls->atsol = 1;
+  ls->emiteol = 0;
+
   ls->lastline = 1;
   ls->source = source;
   ls->envn = luaS_newliteral(L, LUA_ENV);  /* get env name */
@@ -431,14 +440,32 @@ static void read_string (LexState *ls, int del, SemInfo *seminfo) {
 static int llex (LexState *ls, SemInfo *seminfo) {
   luaZ_resetbuffer(ls->buff);
   for (;;) {
+    // Pico8: Shorthand print()
+    int atsol = ls->atsol;
+    ls->atsol = 0;  /* assume no longer at start of line */
+
     switch (ls->current) {
       case '\n': case '\r': {  /* line breaks */
         inclinenumber(ls);
+
+        // Pico8: Shorthand print()
+        if (ls->emiteol) { ls->emiteol = 0; return TK_EOL; }
+
         break;
       }
       case ' ': case '\f': case '\t': case '\v': {  /* spaces */
         next(ls);
+
+        // Pico8: Shorthand print()
+        ls->atsol = atsol;  /* still at sol if we already were. */
+
         break;
+      }
+      // Pico8: Shorthand print()
+      case '?': {  /* '?' at start of line */
+         next(ls);
+         if (atsol == 1) { ls->emiteol = 1; return TK_PRINT; }
+         return '?';
       }
       case '-': {  /* '-' or '--' (comment) */ /* Pico8 '-=' */
         next(ls);
