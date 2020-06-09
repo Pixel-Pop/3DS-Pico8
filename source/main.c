@@ -1,8 +1,6 @@
 #include "main.h"
 #include "loadcart.h"
 
-C2D_TextBuf g_staticBuf;
-
 struct Pico8 pico8;
 
 void init() {
@@ -17,7 +15,7 @@ void init() {
 	pico8.screen = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
 	consoleInit(GFX_BOTTOM, NULL);
 
-	g_staticBuf = C2D_TextBufNew(4096);
+	pico8.textBuffer = C2D_TextBufNew(4096);
 
 	// Set up Pico 8 stuff.
 	pico8.font = C2D_FontLoad("romfs:/gfx/pico8upper.bcfnt");
@@ -37,16 +35,19 @@ void init() {
 	pico8.colors[13] = C2D_Color32(0x83, 0x76, 0x9C, 0xFF); // indigo
 	pico8.colors[14] = C2D_Color32(0xFF, 0x77, 0xA8, 0xFF); // pink
 	pico8.colors[15] = C2D_Color32(0xFF, 0xCC, 0xAA, 0xFF); // peach
+	pico8.transparentColor = C2D_Color32(0x00, 0x00, 0x00, 0x00);
 	memcpy(drawState.palette, pico8.colors, sizeof(u32) * 16);
 	drawState.paletteTransparency[0] = true;
 
 	pico8.tickCounter = malloc(sizeof(TickCounter));
-	pico8.screenCleared = true;
 
 	srand(time(NULL));
 }
 
 void finish() {
+	C2D_TextBufDelete(pico8.textBuffer);
+	C2D_FontFree(pico8.font);
+
 	free(pico8.tickCounter);
 	free(pico8.script);
 	C2D_Fini();
@@ -73,7 +74,7 @@ int main(int argc, char* argv[])
 	C3D_FrameEnd(0);
 
 	// Run script to create necessary functions.
-	luaL_dostring(L, pico8.script);
+	luaL_dostring(L, pico8.script);	
 
 	luaL_dostring(L, "_init()");
 
@@ -91,13 +92,13 @@ int main(int argc, char* argv[])
 		u32 kDown = hidKeysDown();
 		if (kDown & KEY_START)
 			break; // break in order to return to hbmenu
+		
+		// Render the scene		
+		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+		C2D_SceneBegin(pico8.screen);
 
-		if (pico8.screenCleared) {
-			// Render the scene		
-			C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-			C2D_SceneBegin(pico8.screen);
-			pico8.screenCleared = false;
-		}
+		// Draw transparent rectangle to prevent softlock.
+		C2D_DrawRectSolid(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, pico8.transparentColor);
 
 		// Limit fps to ~30.
 		while (pico8.elapsedTime > 33.33333333f) {
@@ -106,10 +107,9 @@ int main(int argc, char* argv[])
 		}
 		luaL_dostring(L, "_draw()");
 
-		if (pico8.screenCleared) {
-			C3D_FrameEnd(0);
-		}
+		C2D_TextBufClear(pico8.textBuffer);
 
+		C3D_FrameEnd(0);
 	}
 
 	finish();

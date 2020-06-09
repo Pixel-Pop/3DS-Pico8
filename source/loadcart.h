@@ -20,7 +20,7 @@ bool loadCart() {
    unsigned char temp;
 
 
-   error = lodepng_decode32_file(&image, &width, &height, "/Pico8Carts/rainyday.p8.png");
+   error = lodepng_decode32_file(&image, &width, &height, "/Pico8Carts/celeste.p8.png");
    if (error) {
       printf("error %u: %s\n", error, lodepng_error_text(error));
       return true;
@@ -59,6 +59,9 @@ bool loadCart() {
          pico8.map[x][y] = decodeImage[x + y * 128 + 0x2000];
       }
    }
+
+   // Load sprite flags.
+   memcpy(pico8.spriteFlags, decodeImage + 0x3000, 256);
 
    // TODO New Compression Lua Code
    

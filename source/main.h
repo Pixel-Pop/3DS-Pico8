@@ -53,18 +53,18 @@ struct LineEndpoint {
 struct Pico8 {
    C3D_RenderTarget* screen;
    C2D_Font font;
+   C2D_TextBuf textBuffer;
    u32 colors[16];
+   u32 transparentColor;
    u8	sprites[64][64];
    u8 overlap[64][64];
    u8 map[128][32];
+   u8 spriteFlags[256];
    char* script;
    TickCounter* tickCounter;
    double elapsedTime;
-   bool screenCleared;
    struct LineEndpoint lineEndpoint;
    u8* previousScreen;
 };
 
 extern struct Pico8 pico8;
-
-extern C2D_TextBuf g_staticBuf;

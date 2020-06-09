@@ -39,6 +39,11 @@ static int l_sfx(lua_State* L) {
 
 /* Graphics Manipulation */
 
+static int l_camera(lua_State* L) {
+   // Placeholder
+   return 0;
+}
+
 static int l_circ(lua_State* L) {
    // TODO draw circle outline w/ lines potentially
    // Placeholder
@@ -80,8 +85,6 @@ static int l_cls(lua_State* L) {
       useColor = 0;
       C2D_TargetClear(pico8.screen, pico8.colors[useColor]);
    }
-   pico8.screenCleared = true;
-   C2D_TextBufClear(g_staticBuf);
    drawState.cursor.x = 0;
    drawState.cursor.y = 0;
    
@@ -92,6 +95,16 @@ static int l_color(lua_State* L) {
    // Return previous color.
    lua_pushnumber(L, drawState.color);
    drawState.color = (int)lua_tonumber(L, 1);
+   return 1;
+}
+
+static int l_fget(lua_State* L) {
+   if (lua_gettop(L) > 1) {
+      lua_pushboolean(L, pico8.spriteFlags[(int)lua_tonumber(L, 1)] & (1 << (int) lua_tonumber(L,2) ));
+   }
+   else {
+      lua_pushnumber(L, pico8.spriteFlags[(int)lua_tonumber(L, 1)]);
+   }
    return 1;
 }
 
@@ -230,7 +243,7 @@ static int l_print(lua_State* L) {
    }
 
    C2D_Text g_staticText;
-   C2D_TextFontParse(&g_staticText, pico8.font, g_staticBuf, text);
+   C2D_TextFontParse(&g_staticText, pico8.font, pico8.textBuffer, text);
    C2D_TextOptimize(&g_staticText);
 
    C2D_DrawText(&g_staticText, C2D_WithColor, x, y, 0.0f, 0.3125f, 0.3125f, drawState.palette[useColor]);
@@ -413,13 +426,26 @@ static int l_map(lua_State* L) {
    int sy = toScreenY(lua_tonumber(L, 4));
    u8 celw = lua_tonumber(L, 5);
    u8 celh = lua_tonumber(L, 6);
+   u8 layers = 0;
+   if (lua_gettop(L) > 6) { layers = lua_tonumber(L, 7); }
 
    u8 currSprite;
-   // This is bad, confusing code.
    for (u8 currX = 0; currX < celw; currX++) {
       for (u8 currY = 0; currY < celh; currY++) {
-         currSprite = pico8.map[celx + currX][cely + currY];
+         if (cely + currY >= 32) {
+            // Read from overlap region
+            currSprite = pico8.overlap[(celx + currX) % 64][(cely + currY - 32) * 2 + (celx + currX) / 64];
+         }
+         else {
+            // Read from map region
+            currSprite = pico8.map[celx + currX][cely + currY];
+         }
+
          if (currSprite == 0) {
+            continue;
+         }
+         // Check flags
+         if ((pico8.spriteFlags[currSprite] & layers) != layers) {
             continue;
          }
 
@@ -456,6 +482,21 @@ static int l_map(lua_State* L) {
    return 0;
 }
 
+static int l_mget(lua_State* L) {
+   u8 celx = lua_tonumber(L, 1);
+   u8 cely = lua_tonumber(L, 2);
+
+   if (cely >= 32) {
+      // Read from lower (shared) portion of map.
+      lua_pushnumber(L, pico8.overlap[celx % 64][(cely - 32) * 2 + celx / 64]);
+   }
+   else {
+      // Read from upper portion of the map.
+      lua_pushnumber(L, pico8.map[celx][cely]);
+   }
+
+   return 1;
+}
 
 /* Math Functions */
 
@@ -543,6 +584,34 @@ static int l_stat(lua_State* L) {
    return 1;
 }
 
+/* String Manipulation */
+
+static int l_sub(lua_State* L) {
+   size_t* length = malloc(sizeof(size_t));
+   const char* str = luaL_tolstring(L, 1, length);
+   int start = lua_tonumber(L, 2);
+   int end;
+   if (lua_gettop(L) > 2) {
+      end = lua_tonumber(L, 3);
+   }
+   else {
+      end = *length - 1;
+   }
+
+   // Convert to proper string index. 1 -> 0, 2 -> 1, etc. / -1 -> length - 1, -2 -> length - 2, etc.
+   if (start < 0) { start += (int)*length; } else { start -= 1; }
+   if (end < 0) { end += (int)*length; } else { end -= 1; }
+
+   char* subStr = malloc(sizeof(char) * (end - start + 2));
+   strncpy(subStr, &str[start], end - start + 1);
+   subStr[end - start + 1] = '\0';
+
+   lua_pushstring(L, subStr);
+   free(length);
+   free(subStr);
+   return 1;
+}
+
 /* Table Manipulation */
 
 static int l_add(lua_State* L) {
@@ -579,6 +648,18 @@ static int l_all(lua_State* L) {
    return 3;
 }
 
+static int l_count(lua_State* L) {
+   lua_Integer tableLen = luaL_len(L, 1);
+   size_t count = 0;
+   for (size_t i = 1; i <= tableLen; i++) {
+      lua_geti(L, 1, i);
+      count += !lua_isnil(L, 2);
+      lua_pop(L, 1);
+   }
+   lua_pushnumber(L, count);
+   return 1;
+}
+
 static int l_del(lua_State* L) {
    lua_Integer tableLen = luaL_len(L, 1);
    u16 i;
@@ -599,13 +680,40 @@ static int l_del(lua_State* L) {
 }
 
 static int l_foreach(lua_State* L) {
-   lua_Integer length = luaL_len(L, 1);
+   /* Stack:
+   1. Table parameter
+   2. Function parameter
+   */
 
-   for (u16 i = 1; i <= length; i++) {
-      lua_pushvalue(L, 2);
+   // Duplicate the table to stack position 3
+   lua_newtable(L);
+   // Get element to position 4
+   lua_geti(L, 1, 1);
+   for (size_t i = 2; !lua_isnil(L, 4); i++) {
+      lua_seti(L, 3, i - 1);
       lua_geti(L, 1, i);
-      lua_call(L, 1, LUA_MULTRET);
    }
+   // Pop nil element from 4;
+   lua_pop(L, 1);
+
+   /* Stack:
+   1. Table parameter
+   2. Function parameter
+   3. Duplicated Table
+   */
+
+   // Push function to position 4 for initial loop
+   lua_pushvalue(L, 2);
+   // Get first value from duplicated table to position 5
+   lua_geti(L, 3, 1);
+
+   for (size_t i = 2; !lua_isnil(L, 5); i++) {
+      lua_call(L, 1, LUA_MULTRET);
+      lua_pushvalue(L, 2);
+      lua_geti(L, 3, i);
+   }
+   // Pop duplicated table, function copy, and remaining nil
+   lua_pop(L, 3);
    return 0;
 }
 
@@ -615,10 +723,12 @@ static const luaL_Reg picolib[] = {
      {"music", l_music},
      {"sfx", l_sfx},
    // Graphics Manipulation
+     {"camera", l_camera},
      {"circ", l_circ},
      {"circfill", l_circfill},
      {"cls", l_cls},
      {"color", l_color},
+     {"fget", l_fget},
      {"line", l_line},
      {"pal", l_pal},
      {"palt", l_palt},
@@ -632,6 +742,7 @@ static const luaL_Reg picolib[] = {
      {"btn", l_btn},
    // Map Manipulation
      {"map", l_map},
+     {"mget", l_mget},
    // Math Functions
      {"abs", l_abs},
      {"cos", l_cos},
@@ -643,9 +754,12 @@ static const luaL_Reg picolib[] = {
      {"sin", l_sin},
    // Pico 8
      {"stat", l_stat},
+   // String Manipulation
+     {"sub", l_sub},
    // Table Manipulation
      {"add", l_add},
      {"all", l_all},
+     {"count", l_count},
      {"del", l_del},
      {"foreach", l_foreach},
      {NULL, NULL}  /* sentinel */

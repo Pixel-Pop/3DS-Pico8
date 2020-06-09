@@ -1,14 +1,20 @@
+
 # 3DS-Pico8
 This is a work-in-progress homebrew application that allows you to play Pico-8 cartridges on your 3DS.
 
 ## Usage
-Currently, this can only play a [Hello World] or [Rainy Day] cartridge, both without any sound.
-Click "Cart" in the bottom left corner, then save the image as helloworld.p8.png / rainyday.p8.png.
-Place the cartridge into a folder named "Pico8Carts" on the root of your 3DS sd card.
 Have the 3DS-Pico8.3dsx in your 3ds folder, then run from the homebrew launcher.
-Pre-release v0.1 plays Hello World, while pre-release v0.2 plays Rainy Day.
+Sound has not yet been implemented.
+The 3DS d-pad is used for left, right, up, down. A is used for Pico8 C/Z and B for X.
 You can press **start** to exit the application.
 
+## Cartridges
+- [helloworld.p8.png] - pre-release v0.1
+- [rainyday.p8.png] - pre-release v0.2
+- [celeste.p8.png] - pre-release v0.3
+
+	Open the webpage. In the Pico8 webplayer, click "Cart" in the bottom left corner. Save the image with the appropriate filename in the folder /Pico8Carts on your SD. Use with the specified release version.
+	
 ## Planned Features
 - Support for all standard Pico-8 functions.
 - Cartridge selection.
@@ -21,8 +27,9 @@ You can press **start** to exit the application.
 * [Nintendo Homebrew Community]
 * [Pico-8 Community]
 
-[Hello World]: https://www.lexaloffle.com/bbs/?pid=9994
-[Rainy Day]: https://www.lexaloffle.com/bbs/?pid=16887
+[helloworld.p8.png]: https://www.lexaloffle.com/bbs/?pid=9994
+[rainyday.p8.png]: https://www.lexaloffle.com/bbs/?pid=16887
+[celeste.p8.png]: https://www.lexaloffle.com/bbs/?tid=2145
 
 [Lua]: https://github.com/lua/lua
 [Pico-8]: https://www.lexaloffle.com/pico-8.php
